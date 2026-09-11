@@ -161,30 +161,117 @@ class GameState:
 class Agent:
   pass
 
-# This object controls the main game loop and rendering
+# Maps arrow / WASD keys to actions.
+KEY_ACTIONS = {
+  pygame.K_UP: Action.UP,
+  pygame.K_w: Action.UP,
+  pygame.K_DOWN: Action.DOWN,
+  pygame.K_s: Action.DOWN,
+  pygame.K_LEFT: Action.LEFT,
+  pygame.K_a: Action.LEFT,
+  pygame.K_RIGHT: Action.RIGHT,
+  pygame.K_d: Action.RIGHT,
+}
+
+# Actions that are direct reversals of each other. A snake can't turn 180
+# degrees into its own neck.
+OPPOSITE = {
+  Action.UP: Action.DOWN,
+  Action.DOWN: Action.UP,
+  Action.LEFT: Action.RIGHT,
+  Action.RIGHT: Action.LEFT,
+}
+
+# Colors.
+COLOR_BG = (18, 18, 18)
+COLOR_GRID = (32, 32, 32)
+COLOR_SNAKE = (60, 200, 90)
+COLOR_HEAD = (120, 240, 140)
+COLOR_FOOD = (220, 70, 70)
+
+# This object controls the main game loop and rendering.
 class GameController:
-  pass
+  def __init__(self, rows=20, columns=20, cell_size=24, fps=10):
+    self.cell_size = cell_size
+    self.fps = fps
+    self.game = GameState(rows, columns)
+    # use the (possibly bumped-to-even) dimensions from the game state.
+    self.width = self.game.columns * cell_size
+    self.height = self.game.rows * cell_size
+    self.direction = Action.RIGHT
+    self.screen = None
+    self.clock = None
+    self.font = None
+
+  def run(self):
+    pygame.init()
+    self.screen = pygame.display.set_mode((self.width, self.height))
+    pygame.display.set_caption("Snake")
+    self.clock = pygame.time.Clock()
+    self.font = pygame.font.SysFont(None, 32)
+
+    running = True
+    while running:
+      for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+          running = False
+        elif event.type == pygame.KEYDOWN:
+          if event.key == pygame.K_ESCAPE:
+            running = False
+          elif event.key == pygame.K_r and self.game.game_over:
+            self.game.reset()
+            self.direction = Action.RIGHT
+          elif event.key in KEY_ACTIONS:
+            new_dir = KEY_ACTIONS[event.key]
+            # ignore reversals unless the snake is length 1.
+            if self.game.length() == 1 or new_dir != OPPOSITE[self.direction]:
+              self.direction = new_dir
+
+      if not self.game.game_over:
+        self.game.step(self.direction)
+
+      self.render()
+      self.clock.tick(self.fps)
+
+    pygame.quit()
+
+  def render(self):
+    self.screen.fill(COLOR_BG)
+    cs = self.cell_size
+
+    # subtle grid lines.
+    for x in range(0, self.width, cs):
+      pygame.draw.line(self.screen, COLOR_GRID, (x, 0), (x, self.height))
+    for y in range(0, self.height, cs):
+      pygame.draw.line(self.screen, COLOR_GRID, (0, y), (self.width, y))
+
+    head_index = self.game.snake[self.game.head]
+    for i in range(self.game.board_size):
+      cell = self.game.board[i]
+      if cell == Square.EMPTY.value:
+        continue
+      x, y = self.game.to_xy(i)
+      rect = pygame.Rect(x * cs, y * cs, cs, cs)
+      if cell == Square.FOOD.value:
+        pygame.draw.rect(self.screen, COLOR_FOOD, rect)
+      elif cell == Square.SNAKE.value:
+        color = COLOR_HEAD if i == head_index else COLOR_SNAKE
+        pygame.draw.rect(self.screen, color, rect)
+
+    score_surf = self.font.render(f"Score: {self.game.score}", True, (230, 230, 230))
+    self.screen.blit(score_surf, (8, 6))
+
+    if self.game.game_over:
+      msg = "You win! " if self.game.won else "Game over "
+      over_surf = self.font.render(msg + "- press R to restart", True, (255, 255, 255))
+      rect = over_surf.get_rect(center=(self.width // 2, self.height // 2))
+      self.screen.blit(over_surf, rect)
+
+    pygame.display.flip()
 
 
 def main():
-  pygame.init()
-
-  # Phase 2, Step 3: verify the engine with a hardcoded input sequence on a
-  # small board. A fixed seed keeps apple placement deterministic.
-  random.seed(0)
-  game_state = GameState(6, 6)
-
-  print("initial state:")
-  game_state.print_state()
-
-  sequence = [
-    Action.RIGHT, Action.RIGHT, Action.DOWN, Action.DOWN,
-    Action.LEFT, Action.LEFT, Action.UP,
-  ]
-  for action in sequence:
-    alive = game_state.step(action)
-    print(f"\nafter {action.name} (alive={alive}):")
-    game_state.print_state()
+  GameController(rows=20, columns=20, cell_size=24, fps=10).run()
 
 if __name__ == "__main__":
   main()
